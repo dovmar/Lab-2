@@ -17,7 +17,7 @@ library(janitor)
 x <- read_csv("life.csv") %>% clean_names()
 ```
 
-### Tikslas: prognozuoti vidutine gyvenimo trukme salyje pagal tam tikrus sveikatos rodiklius
+### Tikslas: prognozuoti vidutinę gyvenimo trukmę šalyje pagal tam tikrus sveikatos rodiklius
 
 
 ```{r}
@@ -36,10 +36,16 @@ transform_1<- function(x) {
 x <- transform_1(x)
 
 x_1 <- x %>% filter(year == max(year)) %>% select(-1)
+
+# atskiri duomenys, patikrinti kaip gautas galutinis modelis progrnozuoja reikšmes
 x_predict <- x %>% filter(year != max(year)) %>% slice_sample(n=10) %>% select(-1)
 
+
+# kaikurių kovariančių priklausomybę nėra tiesinė
+x_1 %>% pivot_longer(-1) %>% ggplot(aes(x=value,y=life_expectancy)) + facet_wrap(vars(name),scales="free") + geom_point() + geom_smooth(method="lm") + theme_minimal()
+
 model <- lm(life_expectancy ~ ., data = x_1)
-crPlots(model) # regis randu kintamuju tarp kuriu priklausomybe nera tiesine
+crPlots(model)
 ```
 
 
@@ -55,26 +61,34 @@ transform_2 <- function(x) {
   )
 }
 
+# transformuojamos kaikurios kovariantės
 x_2 <- transform_2(x_1)
 x_predict <- transform_2(x_predict)
+
+
+# Kintamųjų tiesinis ryšys patikrinamas dar kartą
+x_2 %>% pivot_longer(-1) %>% ggplot(aes(x=value,y=life_expectancy)) + facet_wrap(vars(name),scales="free") + geom_point() + geom_smooth(method="lm") + theme_minimal()
+
+
 write.csv(x_2, "life_modified.csv")
 
+# Sukuriamas modelis
 model <- lm(life_expectancy ~ ., data = x_2)
 ```
 
 
 ### Modelio prielaidos
 ```{r}
-# Liekanu normalumas, homoskadiskumas, liekanu nepriklausomumas, isskirtys
+# Tikrinamas iekanų normalumas, homoskadiškumas, liekanų nepriklausomumas, išskirtys
 plot(model)
 plot(cooks.distance(model))
 plot(hatvalues(model))
 
-# Liekanu normalumo testas
+# Liekanų normalumo testas
 shapiro.test(residuals(model))
 
 
-# homoskadiskumo testas
+# Homoskadiškumo testas
 library(lmtest)
 bptest(model)
 ```
@@ -86,7 +100,7 @@ avPlots(model)
 ```
 
 ```{r}
-anova(model) # H0: beta_1 = beta_2 = ... = 0
+anova(model) # Tikrinama hipotezė H0: beta_1 = beta_2 = ... = 0
 ```
 
 
@@ -94,24 +108,27 @@ anova(model) # H0: beta_1 = beta_2 = ... = 0
 
 
 ```{r}
+# Požinksninė regresija
 library(RcmdrMisc)
 model_2 <- stepwise(model)
 ```
 
 
-### Parametru vertinimas ir interpretacija
+### Parametrų vertinimas ir interpretacija
 
 ```{r}
 # Koeficientai
-summary(model_2) # kadangi jokie transformuoti kintamieji nepakliuvo -> interpretacija paprasta
+summary(model_2) 
+  # Visų koeficientų interpretacija paprasta,
+  # nes pažinksnine regresija neišrinkti transformuoti kintamieji
 library(lm.beta)
 # Standartizuoti koeficientai
 lm.beta(model_2)
 
 # Pasikliovimo interalai
-confint(model_2, )
+confint(model_2)
 
-# Kovarianciu itaka vizualizuota
+# Kovariancių įtaka vizualizuota
 library(effects)
 plot(predictorEffects(model_2))
 ```
@@ -120,16 +137,15 @@ plot(predictorEffects(model_2))
 ### Multikolinearumas
 
 ```{r}
-library(psych)
-
 vars <- dplyr::select(x_2, c(adult_mortality, hepatitis_b, total_expenditure,
   hiv_aids, income_composition_of_resources, life_expectancy))
-corr.test(vars)
 
+#library(psych)
+#corr.test(vars)
 
-#partial correlation
+#dalinės koreliacijos
 library(ppcor)
-pcor(vars)
+pcor(vars)$estimate
 
 # Variance inflation factor
 vif(model_2)
@@ -139,27 +155,32 @@ vif(model_2)
 
 ### Modelio tinkamumo analize
 ```{r}
-summary(model_2) # R-squared = 0.897
-# Adj R-squared = 0.892
 
-predictions <- predict(model_2,newdata = x_predict, interval = "prediction")
-predictions <- as_tibble(predictions) %>% mutate(n = 1:nrow(predictions))
+summary(model_2) 
+  # R-squared = 0.897
+  # Adj R-squared = 0.892
 
+plot_predictions <- function(x,y) {
+  predictions <- predict(x,newdata = y, interval = "prediction")
+  predictions <- as_tibble(predictions) %>% mutate(n = 1:nrow(predictions))
 
-cols <- c(1,18,19,20,21)
-
-predictions_points <- x_predict %>%
+  
+  predictions_points <- y %>%
   mutate(pred = predictions) %>% 
   unnest(pred) %>%
-  dplyr::select(cols) %>%
+  dplyr::select(1,last_col(3),last_col(2),last_col(1),last_col(0)) %>%
   pivot_longer(c(1,2))
+  
 
-
-ggplot(predictions) + 
+  ggplot(predictions) + 
   geom_linerange(aes(x=n,ymin=lwr,ymax=upr)) + 
   geom_point(data=predictions_points,aes(x=n,y=value,color=name),size = 4) + 
   scale_x_discrete("Observation") +
-  scale_y_continuous("Life Expectancy") + 
+  scale_y_continuous("Life Expectancy",limits = c(60,90)) + 
   theme_minimal(base_size = 16) + 
-  scale_color_brewer("",palette = "Set1")
+  scale_color_brewer("",palette = "Set1") 
+}
+
+# Atliekamos kelios pavyzdinės prognozės
+plot_predictions(model_2,x_predict)
 ```
