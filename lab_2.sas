@@ -13,17 +13,18 @@ MODEL life_expectancy = adult_mortality infant_deaths alcohol hepatitis_b measle
 bmi under_five_deaths polio total_expenditure diphtheria hiv_aids 
 thinness_1_19_years thinness_5_9_years income_composition_of_resources 
 schooling gdp_per_capita;
+output out=res residual=liekanos;
 run;
 
 
 /* Normalumo testas */
 
-proc univariate data=rez normal;
+proc univariate data=res normal;
 var liekanos;
 run;
 
 
-/* Modelio parinkimas */
+/* Modelio parinkimas naudojant pažinksninę regresiją*/
 /* Parametrų vertinimas */
 
 PROC REG data=data plots=none outest=summary;
