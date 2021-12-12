@@ -10,13 +10,12 @@ x <- read_csv("life.csv") %>% clean_names()
 
 
 ## ---------------------------------------------------------------------------------------------------------------------
-set.seed(100)
+set.seed(150)
 transform_1<- function(x) {
   x %>%
-  mutate(gdp_per_capita = gdp / population) %>%
   group_by(country) %>%
   fill(everything(), .direction = "up") %>%
-  dplyr::select(-c(1, 3), -population, -gdp, -percentage_expenditure) %>%
+  dplyr::select(-c(1, 3), -population, -percentage_expenditure) %>%
   drop_na() %>%
   ungroup() %>%
   dplyr::select(-1)
@@ -26,7 +25,7 @@ x <- transform_1(x)
 
 x_1 <- x %>% filter(year == max(year)) %>% select(-1)
 
-# atskiri duomenys, patikrinti kaip gautas galutinis modelis progrnozuoja reikšmes
+# atskiri duomenys, patikrinti kaip gautas galutinis modelis prognozuoja reikšmes
 x_predict <- x %>% filter(year != max(year)) %>% slice_sample(n=10) %>% select(-1)
 
 
@@ -40,7 +39,7 @@ crPlots(model)
 ## ---------------------------------------------------------------------------------------------------------------------
 transform_2 <- function(x) {
     x %>% 
-    mutate(gdp_per_capita = log(gdp_per_capita),
+    mutate(gdp = log(gdp),
     infant_deaths = log(infant_deaths + 1),
     measles = log(measles + 1),
     total_expenditure = log(total_expenditure + 1),
@@ -97,7 +96,7 @@ model_2 <- stepwise(model)
 # Koeficientai
 summary(model_2) 
   # Visų koeficientų interpretacija paprasta,
-  # nes pažinksnine regresija neišrinkti transformuoti kintamieji
+  # nes pažingsnine regresija neišrinkti transformuoti kintamieji
 library(lm.beta)
 # Standartizuoti koeficientai
 lm.beta(model_2)
@@ -147,7 +146,7 @@ plot_predictions <- function(x,y) {
   geom_linerange(aes(x=n,ymin=lwr,ymax=upr)) + 
   geom_point(data=predictions_points,aes(x=n,y=value,color=name),size = 4) + 
   scale_x_discrete("Observation") +
-  scale_y_continuous("Life Expectancy",limits = c(60,90)) + 
+  scale_y_continuous("Life Expectancy") + 
   theme_minimal(base_size = 16) + 
   scale_color_brewer("",palette = "Set1") 
 }
