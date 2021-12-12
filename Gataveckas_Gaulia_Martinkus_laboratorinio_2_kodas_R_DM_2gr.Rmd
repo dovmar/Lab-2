@@ -21,7 +21,7 @@ x <- read_csv("life.csv") %>% clean_names()
 
 
 ```{r}
-set.seed(100)
+set.seed(150)
 transform_1<- function(x) {
   x %>%
   group_by(country) %>%
