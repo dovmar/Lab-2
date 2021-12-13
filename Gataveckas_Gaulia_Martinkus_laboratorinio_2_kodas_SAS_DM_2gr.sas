@@ -1,4 +1,4 @@
-PROC IMPORT DATAFILE='/home/u45871880/life_modified.csv'
+PROC IMPORT DATAFILE='/home/u45871880/life_modified_no_outliers.csv'
 	DBMS=CSV
 	OUT=data;
 	GETNAMES=YES;
@@ -10,9 +10,9 @@ RUN;
 PROC REG data=data simple corr plots=(diagnostics(stats=none) RStudentByLeverage(label)
              CooksD(label) Residuals(smooth) ObservedByPredicted(label));
 MODEL life_expectancy = adult_mortality infant_deaths alcohol hepatitis_b measles 
-bmi under_five_deaths polio total_expenditure diphtheria hiv_aids 
+bmi under_five_deaths polio total_expenditure diphtheria hiv_aids gdp 
 thinness_1_19_years thinness_5_9_years income_composition_of_resources 
-schooling gdp;
+schooling;
 output out=res residual=liekanos;
 run;
 

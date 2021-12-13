@@ -1,15 +1,15 @@
-## ---- include=FALSE---------------------------------------------------------------------------------------------------
+## ---- include=FALSE----------------------------------------------------------------------------------------
 knitr::opts_chunk$set(warning=FALSE,message=FALSE)
 
 
-## ---------------------------------------------------------------------------------------------------------------------
+## ----------------------------------------------------------------------------------------------------------
 library(tidyverse)
 library(car)
 library(janitor)
 x <- read_csv("life.csv") %>% clean_names()
 
 
-## ---------------------------------------------------------------------------------------------------------------------
+## ----------------------------------------------------------------------------------------------------------
 set.seed(150)
 transform_1<- function(x) {
   x %>%
@@ -17,16 +17,17 @@ transform_1<- function(x) {
   fill(everything(), .direction = "up") %>%
   dplyr::select(-c(1, 3), -population, -percentage_expenditure) %>%
   drop_na() %>%
-  ungroup() %>%
-  dplyr::select(-1)
+  ungroup()
 }
 
 x <- transform_1(x)
 
-x_1 <- x %>% filter(year == max(year)) %>% select(-1)
+x_1 <- x %>% filter(year == max(year)) %>% select(-2)
+countries <- x_1$country
+x_1 <- x_1 %>% select(-1)
 
 # atskiri duomenys, patikrinti kaip gautas galutinis modelis prognozuoja reikšmes
-x_predict <- x %>% filter(year != max(year)) %>% slice_sample(n=10) %>% select(-1)
+x_predict <- x %>% filter(year != max(year)) %>% slice_sample(n=10) %>% select(-c(1,2)) 
 
 
 # kaikurių kovariančių priklausomybę nėra tiesinė
@@ -36,13 +37,12 @@ model <- lm(life_expectancy ~ ., data = x_1)
 crPlots(model)
 
 
-## ---------------------------------------------------------------------------------------------------------------------
+## ----------------------------------------------------------------------------------------------------------
 transform_2 <- function(x) {
     x %>% 
     mutate(gdp = log(gdp),
     infant_deaths = log(infant_deaths + 1),
     measles = log(measles + 1),
-    total_expenditure = log(total_expenditure + 1),
     under_five_deaths = log(under_five_deaths + 1)
   )
 }
@@ -56,43 +56,66 @@ x_predict <- transform_2(x_predict)
 x_2 %>% pivot_longer(-1) %>% ggplot(aes(x=value,y=life_expectancy)) + facet_wrap(vars(name),scales="free") + geom_point() + geom_smooth(method="lm") + theme_minimal()
 
 
-write.csv(x_2, "life_modified.csv")
+write_csv(x_2, "life_modified.csv")
 
 # Sukuriamas modelis
 model <- lm(life_expectancy ~ ., data = x_2)
 
 
-## ---------------------------------------------------------------------------------------------------------------------
+## ----------------------------------------------------------------------------------------------------------
 # Tikrinamas liekanų normalumas, homoskadiškumas, liekanų nepriklausomumas, išskirtys
 plot(model)
 plot(cooks.distance(model))
 plot(hatvalues(model))
 
+outliers <- c(121,147,44,4)
+
+# patikrinu pagal kokį kintamajį išsiskiria šios reikšmės
+for (i in outliers) {
+  for (j in names(x_2)) {
+    val <- ecdf(x_2[[j]])(x_2[i,j]) 
+    if (val > 0.95 || val < 0.05) {
+      print(paste(i,countries[i],j,val))
+    }
+  }
+}
+
+x_3 <- x_2[-outliers,]
+write_csv(x_3,"life_modified_no_outliers.csv")
+
+model <- lm(life_expectancy ~ ., data = x_3)
+model_outliers <- lm(life_expectancy ~ ., data=x_2)
+
+
 # Liekanų normalumo testas
 shapiro.test(residuals(model))
 
 
-# Homoskadiškumo testas
+# Homoskedastiškumo testas
 library(lmtest)
 bptest(model)
 
 
-## ---------------------------------------------------------------------------------------------------------------------
+## ----------------------------------------------------------------------------------------------------------
 crPlots(model)
 avPlots(model)
 
 
-## ---------------------------------------------------------------------------------------------------------------------
+## ----------------------------------------------------------------------------------------------------------
 anova(model) # Tikrinama hipotezė H0: beta_1 = beta_2 = ... = 0
 
 
-## ---------------------------------------------------------------------------------------------------------------------
+## ----------------------------------------------------------------------------------------------------------
 # Požinksninė regresija
 library(RcmdrMisc)
-model_2 <- stepwise(model)
+model_2 <- stepwise(model,direction = "forward/backward")
+model_outliers_2 <- stepwise(model_outliers)
 
 
-## ---------------------------------------------------------------------------------------------------------------------
+## ----------------------------------------------------------------------------------------------------------
+# Pastebimas stiprus koeficientų reikšmių skirtumas tarp modelio su išskirtimis ir be
+(coef(model_2) - coef(model_outliers_2)) / coef(model_2)
+
 # Koeficientai
 summary(model_2) 
   # Visų koeficientų interpretacija paprasta,
@@ -109,7 +132,7 @@ library(effects)
 plot(predictorEffects(model_2))
 
 
-## ---------------------------------------------------------------------------------------------------------------------
+## ----------------------------------------------------------------------------------------------------------
 vars <- dplyr::select(x_2, c(adult_mortality, hepatitis_b, total_expenditure,
   hiv_aids, income_composition_of_resources, life_expectancy))
 
@@ -124,11 +147,11 @@ pcor(vars)$estimate
 vif(model_2)
 
 
-## ---------------------------------------------------------------------------------------------------------------------
+## ----------------------------------------------------------------------------------------------------------
 
 summary(model_2) 
-  # R-squared = 0.897
-  # Adj R-squared = 0.892
+  # R-squared = 0.925
+  # Adj R-squared = 0.922
 
 plot_predictions <- function(x,y) {
   predictions <- predict(x,newdata = y, interval = "prediction")
